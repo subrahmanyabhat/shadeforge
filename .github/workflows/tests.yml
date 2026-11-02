@@ -1,0 +1,56 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    # Linux and macOS both matter: the typeset font lookup and the platform
+    # pinning in setup.py take different branches on each.
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python: ["3.10", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install fonts (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y fonts-dejavu-core
+
+      - name: Install
+        run: python -m pip install --upgrade pip && python -m pip install -e '.[preview]'
+
+      - name: Tests
+        run: python -m unittest discover -s tests -t . -v
+
+      - name: CLI smoke test
+        run: |
+          shadeforge --version
+          shadeforge models
+          shadeforge doctor || echo "doctor exits non-zero without ComfyUI, as designed"
+
+      - name: Typeset smoke test
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from shadeforge import typeset
+          from PIL import Image
+          src = Path("scene.png"); Image.new("RGB", (256, 320), (30, 20, 10)).save(src)
+          out = typeset.build_ad(src, Path("ad.png"), kicker="MAISON",
+                                 headline="LUXE HAIR SERUM", sub="SMOOTH • NOURISH • SHINE",
+                                 benefit="WEIGHTLESS SHINE", cta="DISCOVER",
+                                 size=(540, 675))
+          assert out.exists() and Image.open(out).size == (540, 675)
+          print("typeset OK on", out)
+          PY
