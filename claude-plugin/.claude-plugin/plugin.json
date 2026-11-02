@@ -1,0 +1,10 @@
+{
+  "name": "shadeforge",
+  "version": "0.4.0",
+  "description": "Local-first image generation for Claude Code, with an optional explicit Gemini cloud path.",
+  "author": {
+    "name": "Subrahmanya Bhat",
+    "url": "https://github.com/subrahmanyabhat/shadeforge"
+  },
+  "homepage": "https://github.com/subrahmanyabhat/shadeforge"
+}

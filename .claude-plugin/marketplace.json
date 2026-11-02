@@ -1,0 +1,15 @@
+{
+  "name": "shadeforge",
+  "owner": {
+    "name": "Subrahmanya Bhat",
+    "url": "https://github.com/subrahmanyabhat/shadeforge"
+  },
+  "plugins": [
+    {
+      "name": "shadeforge",
+      "source": "./claude-plugin",
+      "description": "Local-first image generation: installs and runs ComfyUI, picks a model that fits your disk, and composites real typography for images that need words.",
+      "version": "0.4.0"
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shadeforge"
+version = "0.4.0"
+description = "Local-first image generation for Claude Code with ComfyUI and optional Gemini."
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+dependencies = []
+
+[project.optional-dependencies]
+preview = ["Pillow>=10.0"]
+
+[project.scripts]
+shadeforge = "shadeforge.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["shadeforge*"]
