@@ -83,6 +83,41 @@
   .thumb{height:3.4em;width:auto;vertical-align:-1.15em;margin-right:.8ch;
          border:1px solid var(--edge)}
 
+  /* primary action */
+  .cta{display:flex;align-items:stretch;gap:0;border:1px solid var(--amber);
+       margin:0 0 .7em;max-width:100%;overflow:hidden}
+  .cta code{flex:1;min-width:0;padding:.7em .95em;overflow-x:auto;white-space:pre;
+       color:var(--bright);background:#1a1108;line-height:1.7}
+  .copy{flex:none;background:var(--amber);color:#160f06;border:0;font:inherit;
+       font-weight:600;padding:.65em 1.1em;cursor:pointer}
+  .copy:hover{background:var(--bright)}
+  .copy.done{background:var(--teal)}
+  pre.block + .copy{display:block;margin:-.5em 0 1.2em;background:none;color:var(--dim);
+       border:1px solid var(--edge);padding:.25em .9em;font-weight:400}
+  pre.block + .copy:hover{color:var(--bright);border-color:var(--amber)}
+
+  /* how it works -- genuinely a sequence, so it is numbered */
+  ol.steps{list-style:none;counter-reset:s;padding:0;margin:1.2em 0 0}
+  ol.steps li{counter-increment:s;position:relative;padding:0 0 1.4em 3.2ch;
+       border-left:1px solid var(--edge);margin-left:1.2ch}
+  ol.steps li::before{content:counter(s);position:absolute;left:-1.2ch;top:0;
+       width:2.4ch;height:2.4ch;line-height:2.4ch;text-align:center;
+       background:var(--bg);color:var(--teal);border:1px solid var(--edge)}
+  ol.steps li:last-child{border-left-color:transparent;padding-bottom:0}
+  ol.steps b{color:var(--bright);font-weight:600}
+  ol.steps .note{margin:.35em 0 .6em}
+
+  /* comparison */
+  .scroller{overflow-x:auto;margin:1.1em 0}
+  table.compare{min-width:580px}
+  table.compare thead th{color:var(--amber);font-weight:600;vertical-align:bottom;
+       border-bottom:1px solid var(--edge);padding-right:1.4em}
+  table.compare thead th span{display:block;font-weight:400;font-size:.86em;line-height:1.4}
+  table.compare tbody th{width:14ch;font-weight:400}
+  table.compare td{padding-right:1.4em;color:var(--dim)}
+  table.compare td.win{color:var(--teal)}
+  table.compare td.lose{color:var(--rust)}
+
   /* progress */
   .bar-row{display:flex;gap:1ch;align-items:baseline;flex-wrap:wrap}
   .track{color:var(--faint)} .fill{color:var(--bright)}
@@ -139,10 +174,20 @@
 <pre class="logo" aria-label="ShadeForge">   ▄▄▄ █ █ ▄▀▄ █▀▄ ▄▀▀ ▄▀▀ ▄▀▄ █▀▄ ▄▀▀ ▄▀▀
    ▀▀█ █▀█ █▀█ █ █ █▀▀ █▀▀ █ █ █▀▄ █ █ █▀▀
    ▀▀▀ ▀ ▀ ▀ ▀ ▀▀  ▀▀▀ ▀   ▀▀▀ ▀ ▀ ▀▀  ▀▀▀</pre>
-    <p class="tagline">Image generation that never leaves your machine.</p>
-    <p class="sub">A command-line image generator for Claude Code. It installs ComfyUI for you,
-      picks a model that fits your disk, and refuses to touch a cloud API unless you say so.
-      It is <em>slow</em> — about 15 seconds per sampling step on a CPU — and it tells you so up front.</p>
+    <p class="tagline">Make images on your own computer.</p>
+    <p class="sub">ShadeForge is one command you run in a terminal. It installs everything it needs,
+      then turns a sentence into a picture — with <em>no account, no API key, and nothing uploaded</em>.
+      The trade is time: a few minutes per image instead of a few seconds.</p>
+
+    <div class="cta">
+      <code id="cta-cmd">git clone https://github.com/subrahmanyabhat/shadeforge
+cd shadeforge &amp;&amp; pip install -e '.[preview]'
+shadeforge generate "a lighthouse in sea mist"</code>
+      <button type="button" class="copy" data-copy="#cta-cmd">copy</button>
+    </div>
+    <p class="hint" style="margin-bottom:1.4em">
+      Below is a working demo of the real command line. Type something, or press a button.
+    </p>
 
     <div class="io" id="io" aria-live="polite" aria-label="Terminal output"></div>
 
@@ -162,10 +207,62 @@
   </div>
 </div>
 
+<section id="what">
+  <h2>what it is</h2>
+  <p class="note">A program that draws pictures from a description, running entirely on your laptop.
+    The model weights sit on your disk; the prompt never goes over the network. It is built for
+    people already working in a terminal, and it plugs into Claude Code as a skill so you can just
+    ask for an image in conversation.</p>
+
+  <h2 style="margin-top:2.2em">how it works</h2>
+  <ol class="steps">
+    <li>
+      <b>Install it once.</b>
+      <p class="note">Clone the repo and pip install. One command, about a minute.</p>
+    </li>
+    <li>
+      <b>Ask for an image.</b>
+      <p class="note">The first run notices nothing is set up yet, so it fetches ComfyUI, picks a
+        model that fits your free disk space, starts the server and begins rendering — all on its
+        own. You do not configure anything.</p>
+      <pre class="block" id="s2">shadeforge generate "a lighthouse in sea mist"</pre>
+      <button type="button" class="copy" data-copy="#s2">copy</button>
+    </li>
+    <li>
+      <b>Watch it draw, then get a PNG.</b>
+      <p class="note">A step counter shows progress. When it finishes, the file opens and the path
+        is printed. Later runs skip setup and start rendering in seconds.</p>
+    </li>
+  </ol>
+</section>
+
+<section id="why">
+  <h2>why use this instead of the alternatives</h2>
+  <p class="note">It is not better at everything. It is better at three specific things, and
+    clearly worse at one.</p>
+  <div class="scroller">
+  <table class="compare">
+    <thead>
+      <tr><th></th><th>ShadeForge</th><th>Cloud tools<br><span class="muted">Midjourney, DALL·E, Gemini</span></th><th>ComfyUI on its own</th></tr>
+    </thead>
+    <tbody>
+      <tr><th>Cost per image</th><td class="win">Free, forever</td><td>Per image or monthly</td><td class="win">Free</td></tr>
+      <tr><th>Your prompt</th><td class="win">Never leaves the machine</td><td>Sent to a company</td><td class="win">Stays local</td></tr>
+      <tr><th>Setup</th><td class="win">One command, automatic</td><td>Account and API key</td><td>Install, find models, wire a node graph</td></tr>
+      <tr><th>Speed per image</th><td class="lose">5–10 min on an old CPU</td><td class="win">Seconds</td><td class="lose">Same as ShadeForge</td></tr>
+      <tr><th>Words inside the image</th><td>Composited, always spelled right</td><td class="win">Generated correctly</td><td>You build it yourself</td></tr>
+      <tr><th>Follows a tricky prompt</th><td class="lose">Often misses specifics</td><td class="win">Much better</td><td class="lose">Same model, same misses</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="note"><b>Pick ShadeForge</b> if you want unlimited images at no cost, your prompts kept
+    private, or you work offline — and you can wait a few minutes.
+    <b>Pick a cloud tool</b> if you need one perfect image right now and the prompt is not sensitive.</p>
+</section>
+
 <section id="truth">
-  <h2>what it costs you</h2>
-  <p class="note">Every local generator trades money for time. ShadeForge makes the trade explicit
-    instead of hiding it behind a spinner.</p>
+  <h2>what you need to run it</h2>
+  <p class="note">Nothing to sign up for. These are the real machine requirements.</p>
   <table>
     <tr><th>Per image</th><td><b>5–10 minutes</b> on an Intel Mac, CPU only. Roughly 20 seconds on Apple Silicon.</td></tr>
     <tr><th>Per API call</th><td><b>Nothing.</b> No key, no quota, no request leaves the machine.</td></tr>
@@ -497,6 +594,24 @@ claude plugin install shadeforge@shadeforge</pre>
   });
   document.querySelectorAll("[data-run]").forEach(b =>
     b.addEventListener("click", () => submit(b.dataset.run)));
+
+  document.querySelectorAll(".copy").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const src = document.querySelector(btn.dataset.copy);
+      if (!src) return;
+      const was = btn.textContent;
+      try {
+        await navigator.clipboard.writeText(src.textContent.trim());
+        btn.textContent = "copied"; btn.classList.add("done");
+      } catch (e) {
+        // clipboard is blocked without https or permission -- select it instead
+        const r = document.createRange(); r.selectNodeContents(src);
+        const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+        btn.textContent = "selected";
+      }
+      setTimeout(() => { btn.textContent = was; btn.classList.remove("done"); }, 1600);
+    });
+  });
 
   /* one orchestrated page-load sequence, then nothing moves unless asked */
   (async function boot(){
