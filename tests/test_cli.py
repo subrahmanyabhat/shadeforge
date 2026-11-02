@@ -15,6 +15,7 @@ from pathlib import Path
 from unittest import mock
 
 from shadeforge import cli
+from shadeforge import router
 from shadeforge import setup
 from shadeforge import typeset
 
@@ -407,10 +408,19 @@ class TestNewCliBehaviour(ComfyServerCase):
 
 class TestModelSelection(unittest.TestCase):
     def test_picks_best_that_fits_disk(self):
-        self.assertEqual(setup.pick_model(free=50), "realistic-vision")   # best overall
-        self.assertEqual(setup.pick_model(free=5.5), "realistic-vision")  # only one fits
-        self.assertIsNone(setup.pick_model(free=3))                       # nothing fits
-        self.assertIsNone(setup.pick_model(free=0))
+        self.assertEqual(setup.pick_model(free=50, legacy=False), "sdxl")
+        self.assertEqual(setup.pick_model(free=8, legacy=False), "realistic-vision")
+        self.assertIsNone(setup.pick_model(free=3, legacy=False))
+        self.assertIsNone(setup.pick_model(free=0, legacy=False))
+
+    def test_cpu_only_intel_mac_avoids_heavy_models(self):
+        # SDXL is 1024px-native: minutes per step on a CPU. Not an automatic choice.
+        self.assertEqual(setup.pick_model(free=500, legacy=True), "realistic-vision")
+        self.assertEqual(setup.pick_model(free=500, legacy=False), "sdxl")
+
+    def test_flux_is_never_automatic(self):
+        for legacy in (True, False):
+            self.assertNotEqual(setup.pick_model(free=500, legacy=legacy), "flux-schnell")
 
     def test_install_refuses_when_disk_too_small(self):
         with mock.patch.object(setup, "free_gb", return_value=1.0), \
@@ -529,6 +539,94 @@ class TestTypeset(unittest.TestCase):
             out = Path(d) / "o.png"
             typeset.build_ad(src, out, headline="A" * 60, size=(540, 675))
             self.assertTrue(out.exists())
+
+
+class TestRouter(unittest.TestCase):
+    PHOTO = "realisticVision_v51.safetensors"
+    ART = "dreamshaper_8.safetensors"
+    XL = "sd_xl_base_1.0.safetensors"
+    FLUX = "flux1-schnell-fp8.safetensors"
+    BASE = "v1-5-pruned-emaonly.safetensors"
+
+    def test_photo_prompt_picks_photoreal(self):
+        d = router.decide("RAW photo of a serum bottle, 85mm", [self.PHOTO, self.ART, self.BASE])
+        self.assertEqual(d.model, self.PHOTO)
+        self.assertFalse(d.typeset)
+
+    def test_illustration_prompt_picks_stylised(self):
+        d = router.decide("a watercolour illustration of a fox", [self.PHOTO, self.ART])
+        self.assertEqual(d.model, self.ART)
+
+    def test_photoreal_illustration_resolves_to_photo(self):
+        # "photorealistic illustration" means a photo-looking render, not a painting.
+        d = router.decide("photorealistic illustration of a car", [self.PHOTO, self.ART])
+        self.assertEqual(d.model, self.PHOTO)
+
+    def test_text_prompt_without_flux_falls_back_to_typeset(self):
+        d = router.decide('a poster reading "SUMMER SALE"', [self.PHOTO, self.ART])
+        self.assertTrue(d.typeset)
+        self.assertEqual(d.missing, "flux-schnell")
+        self.assertIn("cannot" if False else "spell", " ".join(d.reasons))
+
+    def test_text_prompt_uses_flux_when_available(self):
+        d = router.decide('a poster reading "SUMMER SALE"', [self.PHOTO, self.FLUX])
+        self.assertEqual(d.model, self.FLUX)
+        self.assertFalse(d.typeset)
+
+    def test_flux_ignored_on_legacy_mac(self):
+        # The pinned 2024-era ComfyUI cannot load Flux; routing to it would hang for hours.
+        d = router.decide('a poster reading "SALE"', [self.PHOTO, self.FLUX], legacy_mac=True)
+        self.assertEqual(d.model, self.PHOTO)
+        self.assertTrue(d.typeset)
+        self.assertTrue(any("Intel Mac" in w for w in d.warnings))
+
+    def test_large_canvas_prefers_sdxl(self):
+        d = router.decide("a wide landscape", [self.PHOTO, self.XL], width=1024, height=1024)
+        self.assertEqual(d.model, self.XL)
+
+    def test_large_canvas_without_sdxl_warns(self):
+        d = router.decide("a wide landscape", [self.PHOTO], width=1024, height=1024)
+        self.assertEqual(d.model, self.PHOTO)
+        self.assertTrue(any("duplicated subjects" in w for w in d.warnings))
+
+    def test_logo_prompt_warns_about_vectors(self):
+        d = router.decide("a logo for a coffee roastery", [self.PHOTO])
+        self.assertTrue(any("vector" in w.lower() for w in d.warnings))
+
+    def test_no_checkpoints_returns_no_model(self):
+        d = router.decide("anything", [])
+        self.assertIsNone(d.model)
+        self.assertIn("setup", " ".join(d.reasons))
+
+    def test_reasons_never_contradict(self):
+        # A found-but-unavailable signal must not also report "no medium cues".
+        d = router.decide("a watercolour illustration of a fox", [self.PHOTO])
+        joined = " ".join(d.reasons)
+        self.assertIn("Illustration asked for", joined)
+        self.assertNotIn("No medium cues", joined)
+
+    def test_explain_is_printable_for_every_branch(self):
+        for prompt, installed in [("a fox", []), ("a fox", [self.PHOTO]),
+                                  ('says "HI"', [self.PHOTO]), ("a logo", [self.XL])]:
+            self.assertIsInstance(router.explain(router.decide(prompt, installed)), str)
+
+
+class TestModelCatalogueGuards(unittest.TestCase):
+    def test_auto_pick_never_selects_a_16gb_model(self):
+        # Huge opt-in models must never be pulled by an automatic setup.
+        self.assertNotEqual(setup.pick_model(free=500), "flux-schnell")
+
+    def test_flux_refused_on_legacy_mac(self):
+        with mock.patch.object(setup, "is_legacy_mac", return_value=True):
+            self.assertIsNotNone(setup.check_feasible("flux-schnell"))
+        with mock.patch.object(setup, "is_legacy_mac", return_value=False):
+            self.assertIsNone(setup.check_feasible("flux-schnell"))
+
+    def test_every_catalogue_entry_is_complete(self):
+        for key, spec in setup.MODELS.items():
+            for field in ("file", "url", "gb", "quality", "license", "note"):
+                self.assertIn(field, spec, f"{key} missing {field}")
+            self.assertTrue(spec["url"].startswith("https://"), key)
 
 
 if __name__ == "__main__":

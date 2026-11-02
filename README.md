@@ -2,7 +2,7 @@
 
 **Local-first image generation for Claude Code.** Prompts go to a local ComfyUI instance by default. Cloud (Gemini) generation exists but is strictly opt-in: a detected API key never causes an upload on its own.
 
-v0.4.0 — 50 tests against an in-process fake ComfyUI server. **Exercised in anger on an Intel Mac only.** The Apple Silicon and Linux code paths are written but have never been run; treat them as untested and report what breaks.
+v0.5.0 — 67 tests against an in-process fake ComfyUI server. **Exercised in anger on an Intel Mac only.** The Apple Silicon and Linux code paths are written but have never been run; treat them as untested and report what breaks.
 
 ## One command
 
@@ -16,8 +16,9 @@ First run installs ComfyUI and a model (~4 GB, once), starts the server, generat
 
 - `shadeforge generate "..."` — install if needed, start if stopped, generate. `--preview`, `--open` and `--auto-setup` default **on** (`--no-*` to disable).
 - `shadeforge typeset in.png out.png --headline "..."` — composite real typography onto an image.
+- `shadeforge recommend "..."` — which model this prompt would use, and why. Renders nothing.
 - `shadeforge models` — free disk and which checkpoints fit.
-- `shadeforge setup` — install explicitly. `--model realistic-vision|sd15|auto`, `--skip-model`.
+- `shadeforge setup` — install explicitly. `--model auto|realistic-vision|dreamshaper|sdxl|sd15|flux-schnell`, `--skip-model`.
 - `shadeforge start` — start the server in the background (log: `~/ComfyUI/comfyui.log`).
 - `shadeforge doctor` — reachability, checkpoints, Gemini key presence (never the value). Exit 0 = ready.
 - `--provider gemini` — explicit cloud generation. See the quota note below.
@@ -36,14 +37,36 @@ shadeforge generate "RAW photo, amber serum bottle on black marble, gold rim lig
 
 Writes `<name>-typeset.png` at 1080×1350. Headlines auto-shrink to fit rather than clipping, and contrast scrims are drawn only behind the text that exists.
 
-## Model selection
+## It picks the model from your prompt
 
-`setup` reports free disk and installs the best checkpoint that fits, refusing rather than filling the disk. `generate` auto-selects the most capable installed checkpoint (photoreal fine-tunes outrank SD1.5 base).
+The part ComfyUI leaves to you. ShadeForge classifies the request, chooses a checkpoint, and prints why — so you can disagree with it.
 
-| Model | Size | Use for |
-| --- | --- | --- |
-| realistic-vision (default) | 2.0 GB | Products, people, food, interiors — far better adherence |
-| sd15 | 4.0 GB | Generic scenes only; fallback |
+```bash
+$ shadeforge recommend "a watercolour illustration of a fox"
+  reads as: art
+Model: dreamshaper_8.safetensors
+  why: Illustration cues in the prompt, so a stylised checkpoint fits better.
+```
+
+| Prompt looks like | Routes to |
+| --- | --- |
+| Photo, product, portrait, `85mm` | Realistic Vision |
+| Illustration, watercolour, anime | DreamShaper |
+| Over 768px on an edge | SDXL (warns if absent) |
+| Contains words to render | Flux if present, else photoreal **+ composited type** |
+| Logo or icon | Warns that vectors are the right tool |
+
+## Models it can fetch
+
+| Model | Size | Good at | Can spell |
+| --- | --- | --- | --- |
+| realistic-vision *(default)* | 2.0 GB | Products, food, people, interiors | No |
+| dreamshaper | 2.0 GB | Illustration, stylised looks | No |
+| sdxl | 6.5 GB | Large canvases, native 1024px | Barely |
+| sd15 | 4.0 GB | Generic scenes; fallback | No |
+| flux-schnell | 16.1 GB | Adherence and **legible text** | Yes |
+
+Nothing over 4 GB is downloaded automatically — ask by name with `--model`. Flux needs a current ComfyUI and a GPU; requesting it on an Intel Mac is refused with the reason instead of wasting a 16 GB download.
 
 ## Progress display
 

@@ -18,9 +18,10 @@ from pathlib import Path
 from typing import Any
 
 from . import setup as setup_mod
+from . import router
 from . import typeset
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
 DEFAULT_COMFY_URL = os.environ.get("COMFYUI_URL", "http://127.0.0.1:8188").rstrip("/")
 DEFAULT_GEMINI_MODEL = os.environ.get("GEMINI_IMAGE_MODEL", "gemini-3-pro-image-preview")
@@ -428,6 +429,22 @@ def warn_oversized(width: int, height: int, checkpoint: str | None) -> None:
               "Use a smaller size, or an SDXL checkpoint for large canvases.")
 
 
+def cmd_recommend(args: argparse.Namespace) -> int:
+    installed = check_comfy(args.comfy_url)[1]
+    if not installed:
+        print("No checkpoints installed yet; showing what this prompt would want.")
+    d = router.decide(args.prompt, installed, args.width, args.height,
+                      legacy_mac=setup_mod.is_legacy_mac())
+    i = d.intent
+    print(f"Prompt: {args.prompt}")
+    print(f"  reads as: {i.style}"
+          + (", needs words in the image" if i.text else "")
+          + (", logo or icon" if i.mark else "")
+          + (f", large canvas {args.width}x{args.height}" if i.big_canvas else ""))
+    print(router.explain(d))
+    return 0 if d.model else 1
+
+
 def cmd_generate(args: argparse.Namespace) -> int:
     output = Path(args.output or default_output()).expanduser().resolve()
     provider = args.provider
@@ -463,16 +480,17 @@ def cmd_generate(args: argparse.Namespace) -> int:
     if provider == "local":
         installed = check_comfy(args.comfy_url)[1]
         if not args.checkpoint:
-            args.checkpoint = best_checkpoint(installed)
-        warn_oversized(args.width, args.height, args.checkpoint)
-        if typeset.wants_text(args.prompt) and not any(
-                k in (args.checkpoint or "").lower() for k in ("sdxl", "flux")):
-            print(
-                "Guardrail: this prompt asks for words in the image, and no local SD1.5-class "
-                "model can spell -- it will render label-shaped gibberish.\n"
-                "  Remove the text from the prompt, then set it with --headline/--sub/--cta, "
-                "which composites real type at full resolution."
-            )
+            # Read the prompt and pick the checkpoint, then show the reasoning.
+            decision = router.decide(args.prompt, installed, args.width, args.height,
+                                     legacy_mac=setup_mod.is_legacy_mac())
+            args.checkpoint = decision.model
+            print(router.explain(decision))
+            if decision.typeset and not any([args.headline, args.kicker, args.sub,
+                                             args.benefit, args.cta]):
+                print("  tip: pass --headline/--sub/--cta to set the words properly "
+                      "instead of letting the model attempt them.")
+        else:
+            warn_oversized(args.width, args.height, args.checkpoint)
         path = generate_local(args.prompt, output, args.width, args.height, args.steps,
                               args.checkpoint, args.seed, args.negative_prompt,
                               args.comfy_url, args.timeout)
@@ -555,6 +573,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_disk = sub.add_parser("models", help="Show disk space and which checkpoints fit.")
     p_disk.set_defaults(func=lambda a: (setup_mod.report_disk(setup_mod.pick_model()), 0)[1])
+
+    p_rec = sub.add_parser("recommend",
+                           help="Show which model a prompt would use, and why, without rendering.")
+    p_rec.add_argument("prompt")
+    p_rec.add_argument("--comfy-url", default=DEFAULT_COMFY_URL)
+    p_rec.add_argument("--width", type=int, default=512)
+    p_rec.add_argument("--height", type=int, default=512)
+    p_rec.set_defaults(func=cmd_recommend)
 
     p_type = sub.add_parser("typeset", help="Composite real typography onto an existing image.")
     p_type.add_argument("image")

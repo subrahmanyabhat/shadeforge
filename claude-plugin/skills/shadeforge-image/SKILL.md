@@ -20,6 +20,16 @@ This single question routes everything, so answer it before generating.
 
 The typeset path produces genuinely crisp, correctly spelled type at full resolution, because it composites real system fonts over the render — the same way beauty and fashion campaigns are actually produced.
 
+## Let it choose the model
+
+Do not pass `--checkpoint` unless the user named one. ShadeForge reads the prompt and routes:
+photographic cues to Realistic Vision, illustration cues to DreamShaper, oversized canvases to
+SDXL, and text-bearing prompts to the composited-typography path. It prints its reasoning; relay
+that reasoning to the user rather than presenting the choice as arbitrary.
+
+`shadeforge recommend "<prompt>"` shows the decision without rendering — useful when the user is
+deciding what to ask for, and free.
+
 ## The commands
 
 ```bash

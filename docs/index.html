@@ -118,6 +118,19 @@
   table.compare td.win{color:var(--teal)}
   table.compare td.lose{color:var(--rust)}
 
+  /* router demo */
+  .router{border:1px solid var(--edge);padding:clamp(12px,2vw,20px);margin:1.3em 0;
+       background:#190f06}
+  .rlabel{display:block;color:var(--dim);margin-bottom:.6em}
+  #rin{white-space:pre-wrap;outline:none}
+  #rin:focus{background:#20150a}
+  .rout{margin-top:1em;min-height:5.5em}
+  .rout .pick{color:var(--bright);font-weight:600}
+  .rout .r{color:var(--dim)} .rout .r b{color:var(--teal);font-weight:400}
+  .rout .w{color:var(--rust)}
+  .rout .tip{color:var(--amber)}
+  .rex{display:block;text-align:left;max-width:100%}
+
   /* progress */
   .bar-row{display:flex;gap:1ch;align-items:baseline;flex-wrap:wrap}
   .track{color:var(--faint)} .fill{color:var(--bright)}
@@ -269,6 +282,54 @@ shadeforge generate "a lighthouse in sea mist"</code>
     <tr><th>Disk</th><td><b>2 GB</b> for the default model, plus ComfyUI. Setup refuses rather than filling your disk.</td></tr>
     <tr><th>First run</th><td>Installs and starts everything itself. You type one command.</td></tr>
   </table>
+</section>
+
+<section id="router">
+  <h2>it reads the prompt and picks the model</h2>
+  <p class="note">This is the part ComfyUI leaves to you. Different jobs want different
+    checkpoints — a photoreal fine-tune makes a terrible watercolour, and nothing small can spell.
+    ShadeForge classifies what you asked for, chooses accordingly, and prints its reasoning so you
+    can disagree with it.</p>
+
+  <div class="router">
+    <label class="rlabel" for="rin">Type a prompt and watch it decide</label>
+    <div class="cta">
+      <code contenteditable="true" spellcheck="false" id="rin">a watercolour illustration of a fox</code>
+      <button type="button" class="copy" id="rgo">route</button>
+    </div>
+    <div class="rout" id="rout"></div>
+    <p class="hint">
+      <button type="button" class="rex">RAW photo of a serum bottle on black marble, 85mm</button>
+      <button type="button" class="rex">a poster with the headline "SUMMER SALE"</button>
+      <button type="button" class="rex">a watercolour illustration of a fox</button>
+      <button type="button" class="rex">a logo for a coffee roastery</button>
+    </p>
+  </div>
+
+  <p class="note">Same decision in your terminal, without rendering anything:</p>
+  <pre class="block" id="reccmd">shadeforge recommend "a watercolour illustration of a fox"</pre>
+  <button type="button" class="copy" data-copy="#reccmd">copy</button>
+</section>
+
+<section id="zoo">
+  <h2>the models it can fetch</h2>
+  <p class="note">It installs only what your disk and machine can actually run. Nothing over
+    4 GB is ever downloaded automatically — you ask for those by name.</p>
+  <div class="scroller">
+  <table class="compare">
+    <thead><tr><th>Model</th><th>Size</th><th>Good at</th><th>Can spell</th></tr></thead>
+    <tbody>
+      <tr><th>Realistic Vision</th><td>2.0 GB</td><td class="win">Products, food, people, interiors — the default</td><td>No</td></tr>
+      <tr><th>DreamShaper 8</th><td>2.0 GB</td><td>Illustration, stylised and drawn looks</td><td>No</td></tr>
+      <tr><th>SDXL base</th><td>6.5 GB</td><td>Large canvases, native 1024px</td><td>Barely</td></tr>
+      <tr><th>SD 1.5</th><td>4.0 GB</td><td>Generic scenes; the fallback</td><td>No</td></tr>
+      <tr><th>FLUX.1 schnell</th><td>16.1 GB</td><td>Prompt adherence, and legible text</td><td class="win">Yes</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="note">Flux is the only one that renders readable words, and it needs a modern GPU
+    machine. Ask for it on an Intel Mac and ShadeForge refuses with the reason rather than
+    downloading 16 GB you cannot use.</p>
 </section>
 
 <section id="text">
@@ -612,6 +673,73 @@ claude plugin install shadeforge@shadeforge</pre>
       setTimeout(() => { btn.textContent = was; btn.classList.remove("done"); }, 1600);
     });
   });
+
+
+  /* ---- routing demo: mirrors shadeforge/router.py rule for rule ---- */
+  const ART  = /\b(illustration|illustrated|painting|painted|watercolou?r|gouache|anime|manga|cartoon|comic|sketch|drawing|line\s*art|vector|flat\s+design|concept\s+art|storybook|pixel\s+art|woodcut|collage)\b/i;
+  const PHOTO= /\b(photo|photograph|photorealistic|realistic|raw\s+photo|product\s+shot|packshot|portrait|headshot|studio|cinematic|bokeh|dslr|\d{2,3}\s*mm|macro|editorial|food\s+photography)\b/i;
+  const MARK = /\b(logo|logotype|wordmark|emblem|monogram|icon\s+set|favicon)\b/i;
+  const TEXT = /\b(text|typography|lettering|wordmark|headline|caption|slogan|tagline|written|writing|signage|says|reading|spelled|font)\b|"[^"]{2,}"|'[^']{2,}'/i;
+
+  function route(prompt){
+    const art = ART.test(prompt), photo = PHOTO.test(prompt);
+    const intent = {
+      text: TEXT.test(prompt),
+      style: photo ? "photo" : (art ? "art" : "general"),
+      mark: MARK.test(prompt)
+    };
+    // What a typical first install has on disk.
+    const installed = { photo:"realisticVision_v51", art:"dreamshaper_8", base:"v1-5-pruned-emaonly" };
+    const out = { reasons: [], warnings: [], tip: null, model: null, typeset: false };
+
+    if (intent.text){
+      out.typeset = true;
+      out.reasons.push("Prompt asks for words. No small local model can spell, so the scene is rendered without text and real type is composited on top.");
+      out.tip = "shadeforge setup --model flux-schnell";
+    }
+    if (!out.model){
+      if (intent.style === "art"){
+        out.model = installed.art;
+        out.reasons.push("Illustration cues, so a stylised checkpoint fits better than a photoreal one.");
+      } else if (intent.style === "photo"){
+        out.model = installed.photo;
+        out.reasons.push("Photographic cues, so the photoreal fine-tune wins.");
+      }
+    }
+    if (!out.model){
+      out.model = installed.photo;
+      out.reasons.push(out.reasons.length
+        ? `Falling back to the most capable installed checkpoint (${installed.photo}).`
+        : `No medium cues in the prompt; using the most capable installed checkpoint (${installed.photo}).`);
+    }
+    if (intent.mark){
+      out.warnings.push("Logos and icons want vectors, not diffusion. Use this for a mood board, then redraw the mark properly.");
+    }
+    return out;
+  }
+
+  const rin = document.getElementById("rin"), rout = document.getElementById("rout");
+  function showRoute(){
+    if (!rin || !rout) return;
+    const d = route(rin.textContent.trim());
+    let html = `<div class="pick">Model: ${d.model}${d.typeset ? "  + composited typography" : ""}</div>`;
+    d.reasons.forEach(r => html += `<div class="r"><b>why</b> ${esc(r)}</div>`);
+    d.warnings.forEach(w => html += `<div class="w">note ${esc(w)}</div>`);
+    if (d.tip) html += `<div class="tip">tip &nbsp;<code>${d.tip}</code> would suit this better</div>`;
+    rout.innerHTML = html;
+  }
+  if (rin){
+    document.getElementById("rgo").addEventListener("click", showRoute);
+    rin.addEventListener("keydown", e => { if (e.key === "Enter"){ e.preventDefault(); showRoute(); } });
+    rin.addEventListener("input", showRoute);
+    document.querySelectorAll(".rex").forEach(b => b.addEventListener("click", () => {
+      rin.textContent = b.textContent.trim(); showRoute();
+      // single-quote for the shell so inner double quotes survive a copy-paste
+      const q = b.textContent.trim().replace(/'/g, `'\\''`);
+      document.getElementById("reccmd").textContent = `shadeforge recommend '${q}'`;
+    }));
+    showRoute();
+  }
 
   /* one orchestrated page-load sequence, then nothing moves unless asked */
   (async function boot(){

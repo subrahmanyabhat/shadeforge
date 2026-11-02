@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "shadeforge"
-version = "0.4.0"
+version = "0.5.0"
 description = "Local-first image generation for Claude Code with ComfyUI and optional Gemini."
 readme = "README.md"
 requires-python = ">=3.10"

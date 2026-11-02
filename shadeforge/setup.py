@@ -46,6 +46,32 @@ MODELS = {
         "license": "CreativeML OpenRAIL-M (commercial use allowed)",
         "note": "Base model. Generic scenes only; weak on specific subjects.",
     },
+    "dreamshaper": {
+        "file": "dreamshaper_8.safetensors",
+        "url": "https://huggingface.co/digiplay/DreamShaper_8/resolve/main/dreamshaper_8.safetensors",
+        "gb": 2.0,
+        "quality": 2,
+        "license": "CreativeML OpenRAIL-M",
+        "note": "Illustration and stylised art. Pick this for drawn looks, not photos.",
+    },
+    "sdxl": {
+        "file": "sd_xl_base_1.0.safetensors",
+        "url": ("https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/"
+                "resolve/main/sd_xl_base_1.0.safetensors"),
+        "gb": 6.5,
+        "quality": 3,
+        "license": "CreativeML Open RAIL++-M",
+        "note": "Native 1024px. Use for large canvases; slow on CPU.",
+    },
+    "flux-schnell": {
+        "file": "flux1-schnell-fp8.safetensors",
+        "url": "https://huggingface.co/Comfy-Org/flux1-schnell/resolve/main/flux1-schnell-fp8.safetensors",
+        "gb": 16.1,
+        "quality": 4,
+        "license": "Apache-2.0 (schnell)",
+        "note": "The only one here that can spell. Needs a modern ComfyUI and real RAM.",
+        "needs_modern": True,
+    },
 }
 DEFAULT_MODEL = "realistic-vision"
 
@@ -126,16 +152,36 @@ def has_model() -> bool:
         if directory.exists() else False
 
 
-def pick_model(free: float | None = None) -> str | None:
+def pick_model(free: float | None = None, legacy: bool | None = None) -> str | None:
     """Best model that fits the disk, with headroom for outputs and the venv.
 
     Returns None when nothing fits -- the caller must then refuse rather than
     start a download that fills the disk.
     """
     free = free_gb(Path.home()) if free is None else free
-    affordable = [(spec["quality"], key) for key, spec in MODELS.items()
-                  if free >= spec["gb"] + 3]
+    legacy = is_legacy_mac() if legacy is None else legacy
+    affordable = []
+    for key, spec in MODELS.items():
+        if free < spec["gb"] + 3:
+            continue
+        # Never auto-pull a 16 GB model; opt in with --model.
+        if spec.get("needs_modern"):
+            continue
+        # CPU-only Intel Macs: a 1024px-native model means minutes per step. Prefer
+        # something that finishes, and let the user ask for SDXL deliberately.
+        if legacy and spec["gb"] > 4:
+            continue
+        affordable.append((spec["quality"], key))
     return max(affordable)[1] if affordable else None
+
+
+def check_feasible(key: str) -> str | None:
+    """Reason this model cannot run here, or None if it can."""
+    spec = MODELS.get(key)
+    if spec and spec.get("needs_modern") and is_legacy_mac():
+        return (f"{key} needs a current ComfyUI and a GPU. This Intel Mac runs a pinned "
+                "2024-era ComfyUI on CPU, where it would not load at all.")
+    return None
 
 
 def report_disk(model_key: str | None = None) -> None:
@@ -158,6 +204,8 @@ def install(skip_model: bool = False, model: str = "auto") -> None:
         chosen = pick_model() if model == "auto" else model
         if model != "auto" and model not in MODELS:
             raise SetupError(f"Unknown model '{model}'. Choose from: {', '.join(MODELS)}")
+        if chosen and (why := check_feasible(chosen)):
+            raise SetupError(why)
         report_disk(chosen)
         if chosen is None:
             raise SetupError(
